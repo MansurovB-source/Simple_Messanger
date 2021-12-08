@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <strings.h>
 
 #define MAX_CLIENTS_COUNT 100
 
@@ -78,11 +79,12 @@ void *client_handler(void *arg) {
     client_cnt++;
     CLIENT_INFO *info = (CLIENT_INFO *) arg;
 
-    RECEIVE name_length_char;
-    RECEIVE name;
-    RECEIVE body_length_char;
-    RECEIVE body;
-    char *time_buffer;
+    RECEIVE name_length_char = {.message = NULL, .status = 0};
+    RECEIVE name = {.message = NULL, .status = 0};
+    RECEIVE body_length_char = {.message = NULL, .status = 0};
+    RECEIVE body = {.message = NULL, .status = 0};
+    char *time_buffer = NULL;
+    time_t t = time(NULL);
     int state = 0;
 
     while (true) {
@@ -124,19 +126,28 @@ void *client_handler(void *arg) {
                 goto error_label;
         }
 
-        time_t t = time(NULL);
         struct tm *lt = localtime(&t);
-        time_buffer = malloc(32);
+        time_buffer = (char *) malloc(32);
+        bzero(time_buffer, 32);
         state = 31;
         sprintf(time_buffer, "[%d:%d:%d]", lt->tm_hour, lt->tm_min, lt->tm_sec);
 
-        notify_all(info->uid, name_length, name.message, body_length, body.message, 32, time_buffer);
+        notify_all(info->uid, name_length, name.message, body_length, body.message, strlen(time_buffer), time_buffer);
 
-        free(time_buffer);
-        free(body.message);
-        free(body_length_char.message);
-        free(name.message);
         free(name_length_char.message);
+        name_length_char.message = NULL;
+        name_length_char.status = 0;
+        free(name.message);
+        name.message = NULL;
+        name.status = 0;
+        free(body_length_char.message);
+        body_length_char.message = NULL;
+        body_length_char.status = 0;
+        free(body.message);
+        body.message = NULL;
+        body.status = 0;
+        free(time_buffer);
+        time_buffer = NULL;
         state = 0;
     }
 
@@ -165,6 +176,7 @@ void *client_handler(void *arg) {
 
 static RECEIVE read_from_socket(CLIENT_INFO *info, uint32_t length) {
     char *buffer = malloc(length);
+    bzero(buffer, length);
     ssize_t size = length;
     ssize_t res;
     do {
@@ -327,14 +339,3 @@ int main(int argc, char *argv[]) {
     }
 }
 
-//    uint16_t name_length;
-//    int res;
-//    if ((res = recv(info->sockfd, &name_length, sizeof(name_length), 0)) <= 0) {
-//        fprintf(stderr, "Couldn't read name length\n");
-//        //TODO: leave flag
-//    }
-//
-//    if (res != sizeof(name_length)) {
-//        fprintf(stderr, "Сouldn't read all the length\n");
-//        //TODO: leave flag
-//    }

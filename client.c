@@ -53,11 +53,13 @@ void print_message(char *name, char *body, char *time) {
     printf("%s ", body);
     printf("%s ", time);
     printf("\n");
+    flush();
     pthread_mutex_unlock(&print_mutex);
 }
 
 static RECEIVE read_from_server(int sockfd, uint32_t length) {
-    char *buffer = malloc(length);
+    char *buffer = (char *) malloc(length);
+    bzero(buffer, length);
     ssize_t size = length;
     ssize_t res;
     do {
@@ -149,11 +151,11 @@ void *send_message_handler(void *arg) {
 /* Handle all communication with the server */
 void *receive_message_handler(void *arg) {
     int *sockfd  =  (int *) arg;
-    RECEIVE name_length_char;
-    RECEIVE name;
-    RECEIVE body_length_char;
-    RECEIVE body;
-    char *time_buffer;
+    RECEIVE name_length_char = {.message = NULL, .status = 0};
+    RECEIVE name = {.message = NULL, .status = 0};
+    RECEIVE body_length_char = {.message = NULL, .status = 0};
+    RECEIVE body = {.message = NULL, .status = 0};
+    char *time_buffer = NULL;
     int state = 0;
 
     while (true) {
@@ -204,11 +206,21 @@ void *receive_message_handler(void *arg) {
 
         print_message(name.message, body.message, time_buffer);
 
-        free(time_buffer);
-        free(body.message);
-        free(body_length_char.message);
-        free(name.message);
         free(name_length_char.message);
+        name_length_char.message = NULL;
+        name_length_char.status = 0;
+        free(name.message);
+        name.message = NULL;
+        name.status = 0;
+        free(body_length_char.message);
+        body_length_char.message = NULL;
+        body_length_char.status = 0;
+        free(body.message);
+        body.message = NULL;
+        body.status = 0;
+        free(time_buffer);
+        time_buffer = NULL;
+        state = 0;
     }
 
     error_label:
@@ -296,7 +308,7 @@ int main(int argc, char *argv[]) {
 
     send_message_handler(&attr);
 
-//    receive_message_handler(&sockfd);
+    //receive_message_handler(&sockfd);
 
     return 0;
 }
