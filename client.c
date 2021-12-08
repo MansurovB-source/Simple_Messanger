@@ -33,7 +33,7 @@ void *send_message_handler(void *arg);
 void print_message(char *name, char *body, char *time);
 
 void flush() {
-    fflush(stdin);
+    //fflush(stdin);
 }
 
 void str_trim_lf (char* arr, int length) {
@@ -126,7 +126,8 @@ void *send_message_handler(void *arg) {
             pthread_mutex_lock(&print_mutex);
             flush();
             printf("> ");
-            while (fgets(message, message_length, stdin) == NULL) {
+            char *mes;
+            while ((mes = fgets(message, message_length, stdin)) == NULL || *mes == 10) {
                 bzero(message, message_length);
             }
 
@@ -155,7 +156,9 @@ void *receive_message_handler(void *arg) {
     RECEIVE name = {.message = NULL, .status = 0};
     RECEIVE body_length_char = {.message = NULL, .status = 0};
     RECEIVE body = {.message = NULL, .status = 0};
-    char *time_buffer = NULL;
+    RECEIVE time_length_char = {.message = NULL, .status = 0};
+    RECEIVE time = {.message = NULL, .status = 0};
+
     int state = 0;
 
     while (true) {
@@ -172,7 +175,7 @@ void *receive_message_handler(void *arg) {
 
         if ((name = read_from_server(*sockfd, name_length)).status <= 0) {
             state = 3;
-            if (name_length_char.status == 0)
+            if (name.status == 0)
                 goto exit_label;
             else
                 goto error_label;
@@ -180,7 +183,7 @@ void *receive_message_handler(void *arg) {
 
         if ((body_length_char = read_from_server(*sockfd, sizeof(uint32_t))).status <= 0) {
             state = 7;
-            if (name_length_char.status == 0)
+            if (body_length_char.status == 0)
                 goto exit_label;
             else
                 goto error_label;
@@ -191,20 +194,32 @@ void *receive_message_handler(void *arg) {
 
         if ((body = read_from_server(*sockfd, body_length)).status <= 0) {
             state = 15;
-            if (name_length_char.status == 0)
+            if (body.status == 0)
                 goto exit_label;
             else
                 goto error_label;
         }
 
-        time_t t = time(NULL);
-        struct tm *lt = localtime(&t);
+        if ((time_length_char = read_from_server(*sockfd, sizeof(uint32_t))).status <= 0) {
+            state = 31;
+            if (time_length_char.status == 0)
+                goto exit_label;
+            else
+                goto error_label;
+        }
 
-        time_buffer  = malloc(32);
-        state = 31;
-        sprintf(time_buffer, "[%d:%d:%d]", lt->tm_hour, lt->tm_min, lt->tm_sec);
+        //TODO: check
+        uint32_t time_length = (time_length_char.message[3] << 24) | ((time_length_char.message[2] & 0xFF) << 16) | ((time_length_char.message[1] & 0xFF) << 8) | (time_length_char.message[0] & 0xFF);
 
-        print_message(name.message, body.message, time_buffer);
+        if ((time = read_from_server(*sockfd, time_length)).status <= 0) {
+            state = 63;
+            if (time.status == 0)
+                goto exit_label;
+            else
+                goto error_label;
+        }
+
+        print_message(name.message, body.message, time.message);
 
         free(name_length_char.message);
         name_length_char.message = NULL;
@@ -218,8 +233,12 @@ void *receive_message_handler(void *arg) {
         free(body.message);
         body.message = NULL;
         body.status = 0;
-        free(time_buffer);
-        time_buffer = NULL;
+        free(name_length_char.message);
+        name_length_char.message = NULL;
+        name_length_char.status = 0;
+        free(name.message);
+        name.message = NULL;
+        name.status = 0;
         state = 0;
     }
 
@@ -237,7 +256,10 @@ void *receive_message_handler(void *arg) {
     if((state & 15) == 15)
         free(body.message);
     if((state & 31) == 31)
-        free(time_buffer);
+        free(time_length_char.message);
+    if((state & 63) == 63)
+        free(time.message);
+
     return NULL;
 }
 

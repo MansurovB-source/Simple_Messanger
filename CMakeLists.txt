@@ -4,3 +4,4 @@ project(Simple_Messanger C)
 set(CMAKE_C_STANDARD 99)
 
 add_executable(Simple_Messanger server.c)
+target_link_libraries(Simple_Messanger pthread)

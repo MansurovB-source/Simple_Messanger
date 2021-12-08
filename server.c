@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <strings.h>
+#include <string.h>
 
 #define MAX_CLIENTS_COUNT 100
 
